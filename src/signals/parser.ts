@@ -6,7 +6,7 @@ export interface ParsedSignal {
   entry: number;
   stopLoss: number;
   takeProfit: number[];
-  leverage?: number;
+  leverage: number; // OBRIGATÓRIO: extraído da call
 }
 
 export interface ParseFailure {
@@ -18,20 +18,18 @@ export interface ParseFailure {
 
 export type ParseResult = { ok: true; signal: ParsedSignal } | { ok: false; failure: ParseFailure };
 
-const SYMBOL_SIDE_RE = /([A-Z]{2,10}\s*\/?\s*[A-Z]{2,10})\s*[-–—]?\s*\b(LONG|SHORT)\b/i;
-const STANDALONE_SYMBOL_RE = /\b[A-Z]{2,10}\/?USDT\b/i;
-const ENTRY_RE = /\b(?:ENTRY|ENTRADA)\b\s*[:\-]?\s*([\d.,]+)/i;
-const SL_RE = /\b(?:SL|STOP\s*LOSS|STOP)\b\s*[:\-]?\s*([\d.,]+)/i;
-// O rótulo numérico (TP1, TP2...) precisa ficar colado em "TP", sem espaço —
-// senão o \d* opcional acaba "roubando" dígitos do próprio preço quando a
-// call usa só "TP 108000" (sem número de rótulo).
-const TP_RE = /\bTP(\d{0,2})\s*[:\-]?\s*([\d.,]+)/gi;
-const LEVERAGE_RE = /\b(?:LEVERAGE|ALAVANCAGEM)\b\s*[:\-]?\s*([\d.,]+)\s*x?/i;
-const ANY_SIGNAL_KEYWORD_RE = /\b(LONG|SHORT|ENTRY|ENTRADA|SL|STOP|TP|TAKE\s*PROFIT)\b/i;
+const SYMBOL_SIDE_RE = /(?:#)?([A-Z0-9]{2,10}\s*\/?\s*[A-Z0-9]{2,10})\s*[-–—:]*\s*(?:\()?\s*\b(LONG|SHORT|COMPRA|VENDA)\b/i;
+const STANDALONE_SYMBOL_RE = /\b[A-Z0-9]{2,10}\/?USDT\b/i;
+const ENTRY_RE = /\b(?:ENTRY|ENTRADA|COMPRA|VENDA|BUY|SELL|INGRESSO)\b\s*[:\-–—]?\s*([\d.,]+)/i;
+const SL_RE = /\b(?:SL|STOP\s*LOSS|STOP)\b\s*[:\-–—]?\s*([\d.,]+)/i;
+const TP_RE = /\b(?:TP|TAKE\s*PROFIT|ALVO|TARGET)(\d{0,2})\b\s*[:\-–—]?\s*([\d.,]+)/gi;
+const LEVERAGE_RE = /\b(?:LEVERAGE|ALAVANCAGEM|LEV|CROSS|ISOLATED|ISOLADA|CRUZADA)\b\s*[:\-–—]?\s*([\d.,]+)\s*x?/i;
+const STANDALONE_LEVERAGE_RE = /\b(\d{1,3})\s*x\b/i;
+const ANY_SIGNAL_KEYWORD_RE = /\b(LONG|SHORT|ENTRY|ENTRADA|SL|STOP|TP|TAKE\s*PROFIT|LEVERAGE|ALAVANCAGEM)\b/i;
 
 /** Normaliza "BTC/USDT" ou "BTCUSDT - LONG" etc. para "BTCUSDT". */
 function normalizeSymbol(raw: string): string {
-  return raw.replace(/[\s/\-–—]/g, "").toUpperCase();
+  return raw.replace(/[\s/\-–—#]/g, "").toUpperCase();
 }
 
 /**
@@ -69,9 +67,6 @@ export function parseSignal(text: string): ParseResult {
   if (!symbolSideMatch) {
     const standaloneMatch = text.match(STANDALONE_SYMBOL_RE);
     if (standaloneMatch) {
-      // Achou algo como "BTCUSDT" na mensagem, mas sem LONG/SHORT junto —
-      // provavelmente uma tentativa de call incompleta (ex.: "BTCUSDT ???"),
-      // não conversa aleatória. Vale a pena responder recusando.
       return {
         ok: false,
         failure: { looksLikeAttempt: true, symbolGuess: normalizeSymbol(standaloneMatch[0]), missing: ["side (LONG/SHORT)"] },
@@ -81,7 +76,8 @@ export function parseSignal(text: string): ParseResult {
   }
 
   const symbol = normalizeSymbol(symbolSideMatch[1]);
-  const side = symbolSideMatch[2].toUpperCase() as Side;
+  const rawSide = symbolSideMatch[2].toUpperCase();
+  const side: Side = rawSide === "VENDA" ? "SHORT" : (rawSide === "COMPRA" ? "LONG" : (rawSide as Side));
 
   if (!/^[A-Z0-9]{2,10}USDT$/.test(symbol)) {
     missing.push("symbol (formato não reconhecido, esperado par terminando em USDT)");
@@ -102,8 +98,11 @@ export function parseSignal(text: string): ParseResult {
   }
   if (takeProfit.length === 0) missing.push("TP (take profit)");
 
-  const leverageMatch = text.match(LEVERAGE_RE);
-  const leverage = leverageMatch ? parseNumber(leverageMatch[1]) ?? undefined : undefined;
+  const leverageMatch = text.match(LEVERAGE_RE) ?? text.match(STANDALONE_LEVERAGE_RE);
+  const leverage = leverageMatch ? parseNumber(leverageMatch[1]) : null;
+  if (leverage === null || leverage <= 0) {
+    missing.push("leverage/alavancagem (ex.: 10x, 20x, LEVERAGE: 10x)");
+  }
 
   if (missing.length > 0) {
     return { ok: false, failure: { looksLikeAttempt: true, symbolGuess: symbol, missing } };
@@ -117,7 +116,7 @@ export function parseSignal(text: string): ParseResult {
       entry: entry as number,
       stopLoss: stopLoss as number,
       takeProfit,
-      leverage,
+      leverage: leverage as number,
     },
   };
 }

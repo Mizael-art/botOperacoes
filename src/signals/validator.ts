@@ -34,7 +34,7 @@ export function validateSignal(signal: ParsedSignal): ValidationResult {
     }
   }
 
-  if (signal.leverage !== undefined && (signal.leverage <= 0 || signal.leverage > MAX_LEVERAGE)) {
+  if (signal.leverage === undefined || signal.leverage <= 0 || signal.leverage > MAX_LEVERAGE) {
     errors.push(`Leverage informada (${signal.leverage}x) fora da faixa aceita (1–${MAX_LEVERAGE}x).`);
   }
 

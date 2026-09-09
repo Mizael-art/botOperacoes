@@ -29,7 +29,7 @@ export type SizingResult = { ok: true; sizing: Sizing } | { ok: false; error: st
  * risco planejado — independente da leverage escolhida.
  */
 function calculateSizing(signal: ParsedSignal, account: AccountSummary, balance: Balance): SizingResult {
-  const leverage = signal.leverage ?? account.defaultLeverage;
+  const leverage = signal.leverage;
   if (leverage < 1 || leverage > 125) {
     return { ok: false, error: `leverage efetivo (${leverage}x) fora do intervalo permitido (1–125x)` };
   }
@@ -220,7 +220,7 @@ async function executeForAccount(
         side: signal.side,
         entryPrice: signal.entry,
         quantity: 0,
-        leverage: signal.leverage ?? account.defaultLeverage,
+        leverage: signal.leverage,
         status: "FAILED",
         error: connection.error,
       });
@@ -236,7 +236,7 @@ async function executeForAccount(
         side: signal.side,
         entryPrice: signal.entry,
         quantity: 0,
-        leverage: signal.leverage ?? account.defaultLeverage,
+        leverage: signal.leverage,
         status: "FAILED",
         error: sizing.error,
       });
@@ -317,7 +317,7 @@ async function executeForAccount(
       side: signal.side,
       entryPrice: signal.entry,
       quantity: 0,
-      leverage: signal.leverage ?? account.defaultLeverage,
+      leverage: signal.leverage,
       status: "FAILED",
       error: message,
     }).catch((persistErr) =>

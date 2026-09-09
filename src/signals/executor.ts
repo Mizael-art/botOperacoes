@@ -113,6 +113,28 @@ export async function simulateExecution(signal: ParsedSignal): Promise<Simulatio
   return { signal, accounts: results };
 }
 
+export function humanizeExchangeError(err: unknown, symbol: string, exchange: string): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+
+  if (
+    lower.includes("symbol not exists") ||
+    lower.includes("symbol does not exist") ||
+    lower.includes("invalid symbol") ||
+    lower.includes("symbol_not_found") ||
+    lower.includes("instrument not found") ||
+    lower.includes("not support") ||
+    lower.includes("not listed") ||
+    lower.includes("10001") ||
+    lower.includes("40034") ||
+    lower.includes("40754")
+  ) {
+    return `⚠️ Moeda/par ${symbol} não existe ou não está disponível para futuros na ${exchange}`;
+  }
+
+  return message;
+}
+
 async function simulateForAccount(signal: ParsedSignal, account: AccountSummary): Promise<AccountSimulation> {
   try {
     const connection = await connectAccount(account);
@@ -131,7 +153,7 @@ async function simulateForAccount(signal: ParsedSignal, account: AccountSummary)
     return {
       account,
       ok: false,
-      error: err instanceof Error ? err.message : "erro desconhecido ao consultar a exchange",
+      error: humanizeExchangeError(err, signal.symbol, account.exchange),
     };
   }
 }
@@ -262,6 +284,11 @@ async function executeForAccount(
     const orderResult = await connection.exchange.openPosition(orderParams);
 
     if (!orderResult.success) {
+      const friendlyError = humanizeExchangeError(
+        orderResult.error ?? "a exchange rejeitou a ordem",
+        signal.symbol,
+        account.exchange,
+      );
       await recordTradeResult({
         accountId: account.id,
         signalId,
@@ -271,9 +298,9 @@ async function executeForAccount(
         quantity: 0,
         leverage,
         status: "FAILED",
-        error: orderResult.error ?? "a exchange rejeitou a ordem",
+        error: friendlyError,
       });
-      return { account, ok: false, error: orderResult.error ?? "a exchange rejeitou a ordem" };
+      return { account, ok: false, error: friendlyError };
     }
 
     // Posição aberta com sucesso — grava ANTES de tentar os TPs parciais,

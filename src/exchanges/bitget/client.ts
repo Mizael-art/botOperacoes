@@ -96,14 +96,28 @@ export class BitgetExchange implements Exchange {
     });
   }
 
+  private async setMarginMode(symbol: string): Promise<void> {
+    try {
+      await this.http.post("/api/v2/mix/account/set-margin-mode", {
+        symbol,
+        productType: PRODUCT_TYPE,
+        marginCoin: MARGIN_COIN,
+        marginMode: "isolated",
+      });
+    } catch {
+      // Se já estiver em isolada ou não suportar alteração no par, segue adiante
+    }
+  }
+
   async openPosition(params: OrderParams): Promise<OrderResult> {
     try {
+      await this.setMarginMode(params.symbol);
       await this.setLeverage(params.symbol, params.leverage);
 
       const body: Record<string, unknown> = {
         symbol: params.symbol,
         productType: PRODUCT_TYPE,
-        marginMode: "crossed",
+        marginMode: "isolated",
         marginCoin: MARGIN_COIN,
         size: String(params.quantity),
         side: toBitgetSide(params.side),
@@ -131,7 +145,7 @@ export class BitgetExchange implements Exchange {
       const result = await this.http.post<{ orderId: string }>("/api/v2/mix/order/place-order", {
         symbol: params.symbol,
         productType: PRODUCT_TYPE,
-        marginMode: "crossed",
+        marginMode: "isolated",
         marginCoin: MARGIN_COIN,
         size: String(params.quantity),
         side: toBitgetSide(params.side) === "buy" ? "sell" : "buy",
@@ -178,7 +192,7 @@ export class BitgetExchange implements Exchange {
       const result = await this.http.post<{ orderId: string }>("/api/v2/mix/order/place-order", {
         symbol: params.symbol,
         productType: PRODUCT_TYPE,
-        marginMode: "crossed",
+        marginMode: "isolated",
         marginCoin: MARGIN_COIN,
         size: String(params.quantity),
         side: toBitgetSide(params.side) === "buy" ? "sell" : "buy",

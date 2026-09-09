@@ -91,6 +91,22 @@ export class BybitExchange implements Exchange {
       }));
   }
 
+  private async ensureIsolatedMargin(symbol: string, leverage: number): Promise<void> {
+    try {
+      await this.http.post("/v5/position/switch-isolated", {
+        category: CATEGORY,
+        symbol,
+        tradeMode: 1, // 1: Isolated Margin, 0: Cross Margin
+        buyLeverage: String(leverage),
+        sellLeverage: String(leverage),
+      });
+    } catch (err) {
+      // 110026: Cross/isolated margin mode is not modified (já está em isolada)
+      // 110043: Leverage não modificado
+      if (err instanceof ExchangeApiError && (err.code === 110026 || err.code === 110043)) return;
+    }
+  }
+
   private async setLeverage(symbol: string, leverage: number): Promise<void> {
     try {
       await this.http.post("/v5/position/set-leverage", {
@@ -108,6 +124,7 @@ export class BybitExchange implements Exchange {
 
   async openPosition(params: OrderParams): Promise<OrderResult> {
     try {
+      await this.ensureIsolatedMargin(params.symbol, params.leverage);
       await this.setLeverage(params.symbol, params.leverage);
 
       const body: Record<string, unknown> = {

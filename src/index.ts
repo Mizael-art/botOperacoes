@@ -340,13 +340,16 @@ function formatParsedMessage(signal: ParsedSignal): string {
 async function replyTestModeSimulation(ctx: Context, signal: ParsedSignal): Promise<void> {
   try {
     const result = await simulateExecution(signal);
-    await ctx.reply(formatTestModeMessage(result), { parse_mode: "Markdown" });
+    const msg = formatTestModeMessage(result);
+    try {
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+    } catch {
+      await ctx.reply(msg);
+    }
   } catch (err) {
     logger.error({ err }, "Falha ao simular execução do sinal (Fase 5)");
-    await ctx.reply(
-      "⚠️ Sinal registrado, mas não foi possível calcular a simulação agora (erro ao consultar contas/exchanges). " +
-        "Confira os logs.",
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    await ctx.reply(`⚠️ Falha ao calcular simulação: ${msg}`);
   }
 }
 
@@ -362,16 +365,15 @@ function formatTestModeMessage(result: SimulationResult): string {
     `Entry: ${signal.entry}`,
     `SL: ${signal.stopLoss}`,
     `TP: ${signal.takeProfit.join(", ")}`,
+    `Leverage: ${signal.leverage}x (ISOLADA)`,
+    "",
   ];
-  if (signal.leverage !== undefined) {
-    lines.push(`Leverage (sinal): ${signal.leverage}x`);
-  }
-  lines.push("");
 
   if (accounts.length === 0) {
-    lines.push("Nenhuma conta habilitada encontrada — nenhuma execução seria feita.");
+    lines.push("⚠️ Nenhuma conta habilitada encontrada no banco de dados.");
+    lines.push("Cadastre uma conta via /adicionar_conta no privado com o bot.");
   } else {
-    lines.push("Seria executado nas contas:");
+    lines.push("Simulação por conta:");
     lines.push("");
     for (const sim of accounts) {
       if (sim.ok) {
@@ -388,7 +390,7 @@ function formatTestModeMessage(result: SimulationResult): string {
     lines.push("", `${executed}/${accounts.length} contas seriam executadas.`);
   }
 
-  lines.push("", "_Nenhuma ordem real foi enviada (TRADING_MODE=test)._");
+  lines.push("", "_Nenhuma ordem real foi enviada (modo teste)._");
   return lines.join("\n");
 }
 
@@ -398,32 +400,36 @@ function formatNumber(value: number): string {
 
 /**
  * Executa de verdade (Fase 6) e responde no grupo no formato "🚀 OPERAÇÃO
- * EXECUTADA" da especificação. Uma falha ao chamar o executor (ex.: banco
- * fora do ar antes mesmo de tentar qualquer conta) é logada e respondida
- * de forma clara — nunca deixa o grupo sem resposta nenhuma sobre um sinal
- * que já foi confirmado como interpretado.
+ * EXECUTADA" da especificação.
  */
 async function replyLiveExecution(ctx: Context, signal: ParsedSignal, signalId: number): Promise<void> {
   try {
     const result = await executeSignal(signal, signalId);
-    await ctx.reply(formatLiveExecutionMessage(result), { parse_mode: "Markdown" });
+    const msg = formatLiveExecutionMessage(result);
+    try {
+      await ctx.reply(msg, { parse_mode: "Markdown" });
+    } catch {
+      await ctx.reply(msg);
+    }
   } catch (err) {
     logger.error({ err, signalId }, "Falha ao executar sinal em modo live (Fase 6)");
-    await ctx.reply(
-      "⚠️ Sinal registrado, mas houve uma falha inesperada ao tentar executá-lo nas contas. Confira os logs — " +
-        "nenhuma conta processada até o erro deve ter ficado em estado inconsistente (cada tentativa é gravada " +
-        "antes de seguir para a próxima).",
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    await ctx.reply(`⚠️ Falha ao executar operação nas contas: ${msg}`);
   }
 }
 
 function formatLiveExecutionMessage(result: ExecutionResult): string {
   const { signal, accounts } = result;
 
-  const lines: string[] = ["🚀 *OPERAÇÃO EXECUTADA*", "", `${signal.symbol} ${signal.side}`, ""];
+  const lines: string[] = [
+    "🚀 *OPERAÇÃO EXECUTADA*",
+    "",
+    `${signal.symbol} ${signal.side} (${signal.leverage}x ISOLADA)`,
+    "",
+  ];
 
   if (accounts.length === 0) {
-    lines.push("Nenhuma conta habilitada encontrada — nenhuma operação foi executada.");
+    lines.push("⚠️ Nenhuma conta habilitada encontrada — nenhuma operação foi executada.");
   } else {
     for (const exec of accounts) {
       if (exec.ok) {

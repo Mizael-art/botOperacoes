@@ -36,7 +36,7 @@ export async function runMigrations(options: { closePool?: boolean } = {}) {
 
   const files = fs
     .readdirSync(schemaDir)
-    .filter((f) => f.endsWith(".sql"))
+    .filter((f: string) => f.endsWith(".sql"))
     .sort();
 
   await ensureMigrationsTable();

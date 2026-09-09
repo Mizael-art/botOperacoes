@@ -10,6 +10,6 @@ export const pool = new Pool({
 // Uma conexão ociosa do pool pode cair (ex.: timeout do provedor) sem
 // que nenhuma query esteja em andamento. Sem este handler, esse erro
 // derrubaria o processo inteiro (unhandled 'error' event).
-pool.on("error", (err) => {
+pool.on("error", (err: Error) => {
   logger.error({ err }, "Erro inesperado em conexão ociosa do pool Postgres");
 });

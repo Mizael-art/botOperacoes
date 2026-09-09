@@ -51,8 +51,9 @@ if (!parsed.success) {
     console.error(`  - ${issue.path.join(".")}: ${issue.message}`);
   }
   process.exit(1);
+  throw new Error("Configuração inválida no .env");
 }
 
-export const env = parsed.data;
+export const env: z.infer<typeof envSchema> = parsed.data;
 
 export type Env = typeof env;

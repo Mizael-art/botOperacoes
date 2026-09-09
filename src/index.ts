@@ -462,7 +462,7 @@ bot.catch((err, ctx) => {
 function startHealthServer(): void {
   const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
-  const server = http.createServer((req, res) => {
+  const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
     if (req.url === "/health" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end("ok");

@@ -3,6 +3,7 @@ import { Telegraf } from "telegraf";
 import type { Context } from "telegraf";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
+import { runMigrations } from "./database/migrate";
 import { startCommand } from "./bot/commands/start";
 import { registerMenuCallbacks } from "./bot/callbacks/menu";
 import { adminPanelCommand } from "./bot/commands/adminPanel";
@@ -478,6 +479,8 @@ function startHealthServer(): void {
 
 async function main() {
   startHealthServer();
+  logger.info("Executando migrações do banco de dados...");
+  await runMigrations();
   await bot.launch();
   logger.info(
     { mode: env.TRADING_MODE, env: env.NODE_ENV },

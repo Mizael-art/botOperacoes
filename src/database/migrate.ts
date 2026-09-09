@@ -24,8 +24,16 @@ async function getAppliedMigrations(): Promise<Set<string>> {
   return new Set(result.rows.map((r) => r.filename));
 }
 
-async function run() {
-  const schemaDir = path.join(__dirname, "schema");
+export async function runMigrations(options: { closePool?: boolean } = {}) {
+  const schemaDir = fs.existsSync(path.join(__dirname, "schema"))
+    ? path.join(__dirname, "schema")
+    : path.join(process.cwd(), "src", "database", "schema");
+
+  if (!fs.existsSync(schemaDir)) {
+    logger.warn({ schemaDir }, "Diretório de schema não encontrado. Pulando migrations.");
+    return;
+  }
+
   const files = fs
     .readdirSync(schemaDir)
     .filter((f) => f.endsWith(".sql"))
@@ -63,11 +71,16 @@ async function run() {
   if (!ranAny) {
     logger.info("Nenhuma migration pendente.");
   }
+
+  if (options.closePool) {
+    await pool.end();
+  }
 }
 
-run()
-  .then(() => pool.end())
-  .catch((err) => {
+// Execução direta via CLI (ex: npm run db:migrate)
+if (require.main === module) {
+  runMigrations({ closePool: true }).catch((err) => {
     logger.error({ err }, "Migração abortada");
     process.exit(1);
   });
+}

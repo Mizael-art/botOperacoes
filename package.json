@@ -1,0 +1,32 @@
+{
+  "name": "trading-signal-bot",
+  "version": "0.1.0",
+  "description": "Bot de Telegram para automação de trading (Bybit/Bitget) a partir de sinais",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test:connection": "tsx scripts/test-connection.ts",
+    "hash:password": "tsx scripts/hash-password.ts",
+    "db:migrate": "tsx src/database/migrate.ts"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "dotenv": "^16.4.5",
+    "pg": "^8.12.0",
+    "zod": "^3.23.8",
+    "pino": "^9.3.2",
+    "pino-pretty": "^11.2.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "tsx": "^4.16.5",
+    "@types/node": "^20.14.15",
+    "@types/pg": "^8.11.6"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

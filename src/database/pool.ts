@@ -5,6 +5,10 @@ import { logger } from "../config/logger";
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
   max: 10,
+  ssl:
+    env.DATABASE_URL.includes("localhost") || env.DATABASE_URL.includes("127.0.0.1")
+      ? false
+      : { rejectUnauthorized: false },
 });
 
 // Uma conexão ociosa do pool pode cair (ex.: timeout do provedor) sem

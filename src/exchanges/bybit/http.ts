@@ -11,6 +11,25 @@ interface BybitResponse<T> {
   time: number;
 }
 
+let cachedBybitTimeOffset: number | null = null;
+let lastBybitSyncTime = 0;
+
+async function getBybitTimeOffset(): Promise<number> {
+  if (cachedBybitTimeOffset !== null && Date.now() - lastBybitSyncTime < 300000) {
+    return cachedBybitTimeOffset;
+  }
+  try {
+    const res = await fetch("https://api.bybit.com/v5/market/time");
+    const data = (await res.json()) as { time?: number };
+    if (data && data.time) {
+      cachedBybitTimeOffset = Number(data.time) - Date.now();
+      lastBybitSyncTime = Date.now();
+      return cachedBybitTimeOffset;
+    }
+  } catch {}
+  return 0;
+}
+
 /**
  * Cliente HTTP de baixo nível para a API V5 da Bybit.
  * Implementa a assinatura HMAC-SHA256 exigida pela Bybit:
@@ -29,8 +48,9 @@ export class BybitHttpClient {
     return createHmac("sha256", this.apiSecret).update(raw).digest("hex");
   }
 
-  private authHeaders(payload: string) {
-    const timestamp = Date.now().toString();
+  private async authHeaders(payload: string) {
+    const offset = await getBybitTimeOffset();
+    const timestamp = (Date.now() + offset).toString();
     return {
       "X-BAPI-API-KEY": this.apiKey,
       "X-BAPI-SIGN": this.sign(timestamp, payload),
@@ -48,7 +68,7 @@ export class BybitHttpClient {
     ).toString();
 
     const url = `${BASE_URL}${path}${query ? `?${query}` : ""}`;
-    const res = await fetch(url, { method: "GET", headers: this.authHeaders(query) });
+    const res = await fetch(url, { method: "GET", headers: await this.authHeaders(query) });
     return this.parse<T>(res);
   }
 
@@ -56,7 +76,7 @@ export class BybitHttpClient {
     const payload = JSON.stringify(body);
     const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
-      headers: this.authHeaders(payload),
+      headers: await this.authHeaders(payload),
       body: payload,
     });
     return this.parse<T>(res);

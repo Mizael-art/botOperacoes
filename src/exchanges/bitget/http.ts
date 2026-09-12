@@ -17,11 +17,26 @@ interface BitgetResponse<T> {
  * https://www.bitget.com/api-doc/common/signature
  */
 export class BitgetHttpClient {
+  private timeOffset: number = 0;
+  private timeSynced: boolean = false;
+
   constructor(
     private readonly apiKey: string,
     private readonly apiSecret: string,
     private readonly apiPassphrase: string,
   ) {}
+
+  private async syncTime(): Promise<void> {
+    if (this.timeSynced) return;
+    try {
+      const res = await fetch(`${BASE_URL}/api/v2/public/time`);
+      const data = (await res.json()) as any;
+      if (data.code === "00000" && data.data?.serverTime) {
+        this.timeOffset = Number(data.data.serverTime) - Date.now();
+        this.timeSynced = true;
+      }
+    } catch {}
+  }
 
   private sign(timestamp: string, method: string, requestPath: string, body: string): string {
     const raw = timestamp + method.toUpperCase() + requestPath + body;
@@ -40,6 +55,7 @@ export class BitgetHttpClient {
   }
 
   async get<T>(path: string, params: Record<string, string | number | undefined> = {}): Promise<T> {
+    await this.syncTime();
     const query = new URLSearchParams(
       Object.entries(params)
         .filter(([, v]) => v !== undefined)
@@ -47,7 +63,7 @@ export class BitgetHttpClient {
     ).toString();
 
     const requestPath = query ? `${path}?${query}` : path;
-    const timestamp = Date.now().toString();
+    const timestamp = (Date.now() + this.timeOffset).toString();
     const res = await fetch(`${BASE_URL}${requestPath}`, {
       method: "GET",
       headers: this.authHeaders(timestamp, "GET", requestPath, ""),
@@ -56,8 +72,9 @@ export class BitgetHttpClient {
   }
 
   async post<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    await this.syncTime();
     const payload = JSON.stringify(body);
-    const timestamp = Date.now().toString();
+    const timestamp = (Date.now() + this.timeOffset).toString();
     const res = await fetch(`${BASE_URL}${path}`, {
       method: "POST",
       headers: this.authHeaders(timestamp, "POST", path, payload),

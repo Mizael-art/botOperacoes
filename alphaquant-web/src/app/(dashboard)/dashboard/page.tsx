@@ -45,15 +45,15 @@ export default function DashboardPage() {
       })
       .catch(() => {});
 
-    // 3. Fetch estatísticas e gráfico
-    fetch("/api/dashboard/stats")
+    // 3. Fetch estatísticas e gráfico dinamicamente pelo período selecionado
+    fetch(`/api/dashboard/stats?period=${currentPeriod}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (data?.stats) setStats(data.stats);
         if (data?.chart) setChartData(data.chart);
       })
       .catch(() => {});
-  }, []);
+  }, [currentPeriod]);
 
   const totalEquity = accounts.reduce((sum, a) => sum + a.equity, 0);
   const openPnl = positions.reduce((sum, p) => sum + p.unrealizedPnl, 0);

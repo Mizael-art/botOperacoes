@@ -95,32 +95,67 @@ export async function removerContaCommand(ctx: Context) {
 export async function configurarRiscoCommand(ctx: Context) {
   const [idArg, riskArg, leverageArg] = getArgs(ctx);
   const id = Number(idArg);
-  const risk = Number(riskArg?.replace(",", "."));
+  const rawRisk = riskArg?.trim().toLowerCase() || "";
+  const isDollar = rawRisk.includes("$") || rawRisk.includes("usdt");
+  const numericRisk = Number(rawRisk.replace(/[$%usdt]/g, "").replace(",", "."));
   const leverage = leverageArg ? Number(leverageArg.replace(",", ".")) : undefined;
 
-  if (!idArg || !Number.isInteger(id) || !riskArg || !Number.isFinite(risk) || risk <= 0 || risk > 100) {
+  if (!idArg || !Number.isInteger(id) || !rawRisk || !Number.isFinite(numericRisk) || numericRisk <= 0) {
     await ctx.reply(
-      "Uso: `/configurar_risco <id> <risco%> [leverage]`\n\nEx.: `/configurar_risco 1 2 10`",
+      [
+        "⚙️ *Como configurar o tamanho de cada operação:*",
+        "",
+        "💵 *Valor Fixo em Dólares:*",
+        "• `/configurar 1 5$` _(opera com $5 USDT fixos por trade)_",
+        "• `/configurar 1 $10` _(opera com $10 USDT fixos por trade)_",
+        "",
+        "📊 *Porcentagem da Banca:*",
+        "• `/configurar 1 5%` _(opera com 5% do saldo disponível)_",
+        "",
+        "Opcionalmente pode definir a alavancagem padrão no final:",
+        "• `/configurar 1 5$ 10` _($5 USDT por trade a 10x)_",
+      ].join("\n"),
       { parse_mode: "Markdown" },
     );
     return;
   }
+
+  if (!isDollar && numericRisk > 100) {
+    await ctx.reply("❌ A porcentagem da banca não pode passar de 100%.");
+    return;
+  }
+
   if (leverageArg && (!Number.isFinite(leverage) || (leverage as number) <= 0 || (leverage as number) > 125)) {
     await ctx.reply("Leverage inválida. Envie um número entre 1 e 125.");
     return;
   }
 
-  const account = await updateAccountRisk(id, risk, leverage);
+  // Se for dólar fixo, armazena como número negativo no banco (ex: -5 = $5.00 USDT)
+  const storedRisk = isDollar ? -Math.abs(numericRisk) : Math.abs(numericRisk);
+
+  const account = await updateAccountRisk(id, storedRisk, leverage);
   if (!account) {
     await ctx.reply(`❌ Conta #${id} não encontrada.`);
     return;
   }
 
+  const modoDesc = isDollar
+    ? `💵 *$${numericRisk.toFixed(2)} USDT fixos por operação*`
+    : `📊 *${numericRisk.toFixed(1)}% do saldo disponível por operação*`;
+
   await ctx.reply(
-    `✅ Conta *${account.name}* (#${account.id}) atualizada: risco ${account.riskPercent}%, leverage ${account.defaultLeverage}x.`,
+    [
+      `✅ *Configuração atualizada com sucesso!*`,
+      "",
+      `🏛️ *Conta:* ${account.name} (#${account.id})`,
+      `🎯 *Tamanho da Ordem:* ${modoDesc}`,
+      `⚡ *Leverage Padrão:* ${account.defaultLeverage}x`,
+    ].join("\n"),
     { parse_mode: "Markdown" },
   );
 }
+
+export const configurarCommand = configurarRiscoCommand;
 
 export async function vincularUsuarioCommand(ctx: Context) {
   const [telegramIdArg, accountIdArg] = getArgs(ctx);

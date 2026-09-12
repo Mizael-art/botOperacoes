@@ -43,10 +43,26 @@ function calculateSizing(signal: ParsedSignal, account: AccountSummary, balance:
     return { ok: false, error: `saldo insuficiente (disponível: ${balance.available.toFixed(2)} USDT)` };
   }
 
-  const riskAmount = balance.available * (account.riskPercent / 100);
-  const quantity = riskAmount / stopDistance;
-  const notional = quantity * signal.entry;
-  const requiredMargin = notional / leverage;
+  let notional: number;
+  let quantity: number;
+  let requiredMargin: number;
+  let riskAmount: number;
+
+  if (account.riskPercent < 0) {
+    // Modo VALOR FIXO EM DÓLARES (ex: $5 por operação)
+    const fixedMargin = Math.abs(account.riskPercent);
+    requiredMargin = fixedMargin;
+    notional = fixedMargin * leverage;
+    quantity = notional / signal.entry;
+    riskAmount = quantity * stopDistance;
+  } else {
+    // Modo PORCENTAGEM DA BANCA (ex: 5% do saldo disponível)
+    const percentMargin = balance.available * (account.riskPercent / 100);
+    requiredMargin = percentMargin;
+    notional = percentMargin * leverage;
+    quantity = notional / signal.entry;
+    riskAmount = quantity * stopDistance;
+  }
 
   if (!Number.isFinite(quantity) || quantity <= 0) {
     return { ok: false, error: "quantidade calculada inválida" };

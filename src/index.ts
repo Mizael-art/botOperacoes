@@ -16,6 +16,7 @@ import {
   desativarContaCommand,
   removerContaCommand,
   configurarRiscoCommand,
+  configurarCommand,
   vincularUsuarioCommand,
   desvincularUsuarioCommand,
 } from "./bot/commands/accounts";
@@ -79,6 +80,7 @@ bot.command("ativar_conta", requireAdmin, ativarContaCommand);
 bot.command("desativar_conta", requireAdmin, desativarContaCommand);
 bot.command("remover_conta", requireAdmin, removerContaCommand);
 bot.command("configurar_risco", requireAdmin, configurarRiscoCommand);
+bot.command("configurar", requireAdmin, configurarCommand);
 bot.command("vincular_usuario", requireAdmin, vincularUsuarioCommand);
 bot.command("desvincular_usuario", requireAdmin, desvincularUsuarioCommand);
 
@@ -469,29 +471,56 @@ function startHealthServer(): void {
   const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
   const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
-    if (req.url === "/health" && req.method === "GET") {
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("ok");
-      return;
+    const url = req.url || "/";
+    const method = req.method?.toUpperCase() || "GET";
+
+    if (method === "GET" || method === "HEAD") {
+      if (url === "/health" || url === "/health/" || url === "/" || url === "/ping") {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.end(method === "HEAD" ? "" : "ok");
+        return;
+      }
     }
+
     res.writeHead(404, { "Content-Type": "text/plain" });
     res.end("not found");
   });
 
   server.listen(PORT, () => {
-    logger.info({ port: PORT }, "🌐 Health-check server ouvindo");
+    logger.info({ port: PORT }, "🌐 Health-check server ouvindo (GET/HEAD suportados)");
   });
+}
+
+async function launchBotWithRetry(maxRetries = 5, delayMs = 5000): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await bot.launch();
+      logger.info(
+        { mode: env.TRADING_MODE, env: env.NODE_ENV },
+        "🤖 Bot iniciado com sucesso",
+      );
+      return;
+    } catch (err: any) {
+      if (err?.response?.error_code === 409 || err?.message?.includes("409")) {
+        logger.warn(
+          { attempt, maxRetries },
+          "⚠️ Conflito 409 no Telegram (outra instância finalizando). Aguardando liberação para reconectar...",
+        );
+        if (attempt < maxRetries) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+      }
+      throw err;
+    }
+  }
 }
 
 async function main() {
   startHealthServer();
   logger.info("Executando migrações do banco de dados...");
   await runMigrations();
-  await bot.launch();
-  logger.info(
-    { mode: env.TRADING_MODE, env: env.NODE_ENV },
-    "🤖 Bot iniciado com sucesso",
-  );
+  await launchBotWithRetry();
 }
 
 main().catch((err) => {

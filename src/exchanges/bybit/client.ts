@@ -44,8 +44,16 @@ export class BybitExchange implements Exchange {
     const result = await this.http.get<{
       list: Array<{
         totalEquity: string;
+        totalWalletBalance: string;
         totalAvailableBalance: string;
         totalMarginBalance: string;
+        coin?: Array<{
+          coin: string;
+          equity: string;
+          walletBalance: string;
+          availableToWithdraw: string;
+          totalPositionIM: string;
+        }>;
       }>;
     }>("/v5/account/wallet-balance", { accountType: "UNIFIED" });
 
@@ -54,13 +62,20 @@ export class BybitExchange implements Exchange {
       throw new ExchangeApiError("Nenhuma conta UNIFIED encontrada na Bybit", "BYBIT");
     }
 
-    const equity = Number(account.totalEquity);
-    const available = Number(account.totalAvailableBalance);
+    const coinUsdt = account.coin?.find((c) => c.coin === "USDT") || account.coin?.[0];
+    const equity = Number(account.totalEquity || coinUsdt?.equity || 0);
+    const usedMargin = Number(coinUsdt?.totalPositionIM || 0);
+    let available = Number(account.totalAvailableBalance || coinUsdt?.availableToWithdraw || 0);
+
+    if (!available || isNaN(available) || available <= 0) {
+      const walletBal = Number(coinUsdt?.walletBalance || account.totalWalletBalance || equity);
+      available = Math.max(0, walletBal - usedMargin);
+    }
 
     return {
       equity,
       available,
-      usedMargin: Math.max(0, Number(account.totalMarginBalance) - available),
+      usedMargin,
     };
   }
 

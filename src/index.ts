@@ -10,6 +10,7 @@ import { adminPanelCommand } from "./bot/commands/adminPanel";
 import { statusGlobalCommand } from "./bot/commands/statusGlobal";
 import { requireAdmin } from "./bot/handlers/requireAdmin";
 import { requirePrivateChat } from "./bot/handlers/requirePrivateChat";
+import { MTProtoListenerService } from "./listener/mtproto";
 import {
   listarContasCommand,
   ativarContaCommand,
@@ -521,6 +522,10 @@ async function main() {
   logger.info("Executando migrações do banco de dados...");
   await runMigrations();
   await launchBotWithRetry();
+
+  // Inicia listener MTProto para monitorar grupos privados de calls 24/7 na nuvem
+  const mtproto = new MTProtoListenerService();
+  await mtproto.start();
 }
 
 main().catch((err) => {

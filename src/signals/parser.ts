@@ -123,10 +123,25 @@ export function parseSignal(text: string): ParseResult {
     const value = parseNumber(match[2]);
     if (value !== null && value > 0) takeProfit.push(value);
   }
+
+  // Se não encontrou por TP1, TP2, tenta alvos separados por barra (ex: Targets: 0.2452 / 0.2405 / 0.2360)
+  if (takeProfit.length === 0) {
+    const targetsMatch = text.match(/(?:Targets?|TPs?|Take\s*Profits?)\s*:\s*([0-9.,\s/]+)/i);
+    if (targetsMatch) {
+      const tokens = targetsMatch[1]
+        .split(/[\/\n\s]+/)
+        .map((t) => t.trim().replace(",", "."))
+        .filter((t) => t.length > 0 && !isNaN(Number(t)))
+        .map(Number);
+      takeProfit.push(...tokens);
+    }
+  }
+
   if (takeProfit.length === 0) missing.push("TP (take profit)");
 
   const leverageMatch = text.match(LEVERAGE_RE) ?? text.match(STANDALONE_LEVERAGE_RE);
-  const leverage = leverageMatch ? parseNumber(leverageMatch[1]) : null;
+  // Alavancagem padrão do grupo de calls é 15x se não especificada
+  const leverage = leverageMatch ? parseNumber(leverageMatch[1]) : 15;
   if (leverage === null || leverage <= 0) {
     missing.push("leverage/alavancagem (ex.: 10x, 20x, LEVERAGE: 10x)");
   }

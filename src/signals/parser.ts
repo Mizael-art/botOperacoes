@@ -18,7 +18,10 @@ export interface ParseFailure {
 
 export type ParseResult = { ok: true; signal: ParsedSignal } | { ok: false; failure: ParseFailure };
 
+const SYMBOL_LINE_RE = /(?:Symbol|Pair|Par|Moeda)\s*[:\-–—]?\s*([A-Z0-9]{2,10}(?:\/?USDT)?)/i;
+const SIDE_LINE_RE = /(?:Side|Direção|Direcao|Tipo)\s*[:\-–—]?\s*\b(LONG|SHORT|COMPRA|VENDA)\b/i;
 const SYMBOL_SIDE_RE = /(?:#)?([A-Z0-9]{2,10}\s*\/?\s*[A-Z0-9]{2,10})\s*[-–—:]*\s*(?:\()?\s*\b(LONG|SHORT|COMPRA|VENDA)\b/i;
+const SIDE_SYMBOL_RE = /\b(LONG|SHORT|COMPRA|VENDA)\b\s*[-–—:]*\s*(?:#)?([A-Z0-9]{2,10}(?:\/?USDT)?)/i;
 const STANDALONE_SYMBOL_RE = /\b[A-Z0-9]{2,10}\/?USDT\b/i;
 const ENTRY_RE = /\b(?:ENTRY|ENTRADA|COMPRA|VENDA|BUY|SELL|INGRESSO)\b\s*[:\-–—]?\s*([\d.,]+)/i;
 const SL_RE = /\b(?:SL|STOP\s*LOSS|STOP)\b\s*[:\-–—]?\s*([\d.,]+)/i;
@@ -29,7 +32,10 @@ const ANY_SIGNAL_KEYWORD_RE = /\b(LONG|SHORT|ENTRY|ENTRADA|SL|STOP|TP|TAKE\s*PRO
 
 /** Normaliza "BTC/USDT" ou "BTCUSDT - LONG" etc. para "BTCUSDT". */
 function normalizeSymbol(raw: string): string {
-  return raw.replace(/[\s/\-–—#]/g, "").toUpperCase();
+  let s = raw.replace(/[\s/\-–—#:]/g, "").toUpperCase();
+  s = s.replace(/^(?:SYMBOL|PAIR|PAR|MOEDA)/i, "");
+  if (!s.endsWith("USDT")) s += "USDT";
+  return s;
 }
 
 /**
@@ -62,9 +68,34 @@ function parseNumber(raw: string): number | null {
 export function parseSignal(text: string): ParseResult {
   const missing: string[] = [];
 
-  const symbolSideMatch = text.match(SYMBOL_SIDE_RE);
+  let symbol: string | null = null;
+  let side: Side | null = null;
 
-  if (!symbolSideMatch) {
+  // 1. Tenta formato chave-valor explícito (ex: Symbol: JUPUSDT e Side: SHORT)
+  const symLineMatch = text.match(SYMBOL_LINE_RE);
+  const sideLineMatch = text.match(SIDE_LINE_RE);
+
+  if (symLineMatch && sideLineMatch) {
+    symbol = normalizeSymbol(symLineMatch[1]);
+    const rawSide = sideLineMatch[1].toUpperCase();
+    side = rawSide === "VENDA" ? "SHORT" : (rawSide === "COMPRA" ? "LONG" : (rawSide as Side));
+  } else {
+    // 2. Tenta SYMBOL LONG ou LONG SYMBOL
+    const symbolSideMatch = text.match(SYMBOL_SIDE_RE);
+    const sideSymbolMatch = text.match(SIDE_SYMBOL_RE);
+
+    if (symbolSideMatch) {
+      symbol = normalizeSymbol(symbolSideMatch[1]);
+      const rawSide = symbolSideMatch[2].toUpperCase();
+      side = rawSide === "VENDA" ? "SHORT" : (rawSide === "COMPRA" ? "LONG" : (rawSide as Side));
+    } else if (sideSymbolMatch) {
+      symbol = normalizeSymbol(sideSymbolMatch[2]);
+      const rawSide = sideSymbolMatch[1].toUpperCase();
+      side = rawSide === "VENDA" ? "SHORT" : (rawSide === "COMPRA" ? "LONG" : (rawSide as Side));
+    }
+  }
+
+  if (!symbol || !side) {
     const standaloneMatch = text.match(STANDALONE_SYMBOL_RE);
     if (standaloneMatch) {
       return {
@@ -74,10 +105,6 @@ export function parseSignal(text: string): ParseResult {
     }
     return { ok: false, failure: { looksLikeAttempt: ANY_SIGNAL_KEYWORD_RE.test(text), missing: ["symbol", "side"] } };
   }
-
-  const symbol = normalizeSymbol(symbolSideMatch[1]);
-  const rawSide = symbolSideMatch[2].toUpperCase();
-  const side: Side = rawSide === "VENDA" ? "SHORT" : (rawSide === "COMPRA" ? "LONG" : (rawSide as Side));
 
   if (!/^[A-Z0-9]{2,10}USDT$/.test(symbol)) {
     missing.push("symbol (formato não reconhecido, esperado par terminando em USDT)");
